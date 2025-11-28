@@ -1,0 +1,7 @@
+# 串口配置
+com_port: COM7
+baud_rate: 12000000
+# 输出目录路径
+output_dir: D:\workdir\ACE-8.0.2\bes_log2bin\logs
+# 文件后缀名(可选)
+suffix: test

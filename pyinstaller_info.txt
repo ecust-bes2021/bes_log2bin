@@ -1,0 +1,1 @@
+pyinstaller --onefile --add-binary "SerialPortLib_x64.dll;." --add-data "config.yaml;." log2bin_script.py

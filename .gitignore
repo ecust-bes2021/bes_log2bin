@@ -1,0 +1,16 @@
+build/
+*.toc
+*.log
+*.log.gz
+*.log.gz.part
+*.log.gz.part.1
+*.log.gz.part.2
+*.log.gz.part.3
+log2bin/logs/
+*.spec
+*.rar
+dist/
+log2bin-2025*/
+logs/
+__pycache__/
+dist/
