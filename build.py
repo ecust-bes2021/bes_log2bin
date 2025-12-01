@@ -31,7 +31,7 @@ def main():
     current_dir = os.path.dirname(os.path.abspath(__file__))
     
     # 确定要打包的主脚本
-    main_script = os.path.join(current_dir, "log2bin_script.py")
+    main_script = os.path.join(current_dir, "log2bin_copy.py")
     if not os.path.exists(main_script):
         print(f"错误: 找不到主脚本 {main_script}")
         return 1

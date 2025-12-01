@@ -6,9 +6,9 @@ import time    # 提供时间相关功能
 import queue   # 提供线程安全的队列实现
 import threading  # 提供多线程支持
 import argparse  # 提供命令行参数解析功能
-import yaml    # 用于解析YAML格式的配置文件
 
 # 这是一个具备心跳检测功能的串口数据读取程序
+# 配置通过命令行参数传入，格式：-p "COM7:12000000:D:\logs:test"
 
 # --- 配置部分 ---
 # DLL文件路径配置
@@ -18,9 +18,8 @@ if getattr(sys,'frozen',False):  # 检查是否是打包后的可执行文件
 else:
     current_dir = os.path.dirname(__file__)  # 否则获取脚本所在目录
 
-# 定义DLL文件路径和配置文件路径
+# 定义DLL文件路径
 DLL_PATH = os.path.join(current_dir, "SerialPortLib_x64.dll")  # 串口库DLL路径
-CONFIG_PATH = os.path.join(current_dir, "config.yaml")  # 配置文件路径
 
 # --- 全局变量定义 ---
 # 使用线程安全的队列作为回调和写入线程之间的数据缓冲区
@@ -147,7 +146,7 @@ def writer_thread_func(filename):
         # 重试循环
         while retry_count < max_retry_count and file_handle is None:
             try:
-                file_handle = open(filename, 'wb')  # 以二进制写模式打开文件
+                file_handle = open(filename, 'w', encoding='utf-8')  # 以文本写模式打开文件
             except IOError as e:  # 文件打开失败
                 retry_count += 1  # 增加重试计数
                 error_msg = f"错误：打开输出文件失败 (尝试 {retry_count}/{max_retry_count}): {e}"
@@ -189,12 +188,33 @@ def writer_thread_func(filename):
 
                     if data_chunk:  # 如果有数据
                         try:
-                            file_handle.write(data_chunk)  # 写入文件
-                            written_bytes_total += len(data_chunk)  # 更新写入字节数
+                            # 将二进制数据解码为字符串后写入文件
+                            # 使用 errors='backslashreplace' 处理无法解码的字节
+                            text_data = data_chunk.decode('utf-8', errors='backslashreplace')
+
+                            # 按行处理，为每行添加时间戳
+                            # 格式：2025-11-28 14:05:49 内容
+                            lines = text_data.split('\n')
+                            for i, line in enumerate(lines):
+                                if i < len(lines) - 1:  # 不是最后一个元素，说明后面有换行符
+                                    # 获取当前时间戳
+                                    timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+                                    timestamped_line = f"{timestamp} {line}\n"
+                                    file_handle.write(timestamped_line)  # 写入文件
+                                    print(timestamped_line, end='', flush=True)  # 显示到终端
+                                elif line:  # 最后一个元素且不为空（说明数据不以换行结尾）
+                                    timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+                                    timestamped_line = f"{timestamp} {line}"
+                                    file_handle.write(timestamped_line)  # 写入文件
+                                    print(timestamped_line, end='', flush=True)  # 显示到终端（不换行）
+                                # 如果最后一个元素为空，说明数据以换行结尾，已经在上面处理过了
+
+                            written_bytes_total += len(data_chunk)  # 更新写入字节数（原始字节数）
                             # 每写入1MB更新一次状态
                             if written_bytes_total % (1024 * 1024) == 0:
                                 writer_status.update(bytes_written=written_bytes_total)
-                                print(f"已写入 {written_bytes_total / (1024*1024):.2f} MB")
+                                # 使用stderr输出状态信息，避免与log内容混淆
+                                print(f"\n[状态] 已写入 {written_bytes_total / (1024*1024):.2f} MB", file=sys.stderr)
                         except IOError as e:  # 写入失败
                             error_msg = f"错误：文件写入失败: {e}"
                             print(error_msg, file=sys.stderr)
@@ -211,7 +231,7 @@ def writer_thread_func(filename):
                     # 尝试重新打开文件
                     try:
                         file_handle.close()  # 关闭当前文件
-                        file_handle = open(filename, 'ab')  # 以追加模式重新打开
+                        file_handle = open(filename, 'a', encoding='utf-8')  # 以文本追加模式重新打开
                         print(f"已重新打开文件 '{filename}' 继续写入")
                     except IOError as reopen_error:  # 重新打开失败
                         error_msg = f"错误：无法重新打开文件: {reopen_error}"
@@ -232,96 +252,139 @@ def writer_thread_func(filename):
         writer_status.update(running=False, bytes_written=written_bytes_total)
         print(f"写入线程结束。总共写入 {written_bytes_total} 字节。")
 
-# --- 读取配置文件函数 ---
-def read_config():
-    """读取配置文件，获取波特率、COM端口和输出文件路径"""
-    if not os.path.exists(CONFIG_PATH):  # 检查配置文件是否存在
-        print(f"错误：找不到配置文件: {CONFIG_PATH}", file=sys.stderr)
-        print(f"请创建配置文件，格式如下:", file=sys.stderr)
-        print(f"# config.yaml 示例", file=sys.stderr)
-        print(f"com_port: COM3", file=sys.stderr)
-        print(f"baud_rate: 12000000", file=sys.stderr)
-        print(f"output_dir: D:\\workdir\\ACE-8.0.2\\bes_log2bin\\logs", file=sys.stderr)
-        print(f"suffix: test", file=sys.stderr)
-        print(f"", file=sys.stderr)
-        print(f"注意: 在YAML中，Windows路径可以直接使用单反斜杠，无需转义", file=sys.stderr)
-        sys.exit(1)  # 退出程序
-        
+# --- 命令行参数解析函数 ---
+def parse_arguments():
+    """
+    解析命令行参数，获取波特率、COM端口和输出文件路径。
+    使用独立的命令行参数，避免Windows路径中冒号导致的解析问题。
+
+    命令行格式：
+      python log2bin_copy.py -c COM7 -b 12000000 -o D:\logs [-s test]
+
+    参数说明：
+      -c, --com-port    : 串口名称（如COM7）
+      -b, --baud-rate   : 波特率（如12000000）
+      -o, --output-dir  : 输出目录路径
+      -s, --suffix      : 文件后缀名（可选）
+    """
+    # 创建命令行参数解析器
+    parser = argparse.ArgumentParser(
+        description='Log to Text Converter - 具备心跳检测功能的串口数据读取程序',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog='''
+示例用法：
+  python log2bin_copy.py -c COM7 -b 12000000 -o D:\\logs
+  python log2bin_copy.py -c COM7 -b 12000000 -o D:\\logs -s test
+  python log2bin_copy.py --com-port COM3 --baud-rate 115200 --output-dir C:\\data --suffix debug
+
+参数说明：
+  -c, --com-port    : 串口名称，如 COM3, COM7 等
+  -b, --baud-rate   : 波特率，如 9600, 115200, 12000000 等
+  -o, --output-dir  : 数据文件保存的目录路径
+  -s, --suffix      : 可选，添加到文件名中的标识符
+        '''
+    )
+
+    # 添加串口参数（必需）
+    parser.add_argument(
+        "-c", "--com-port",
+        required=True,
+        metavar="PORT",
+        help="串口名称，例如: COM3, COM7"
+    )
+
+    # 添加波特率参数（必需）
+    parser.add_argument(
+        "-b", "--baud-rate",
+        required=True,
+        type=int,
+        metavar="RATE",
+        help="波特率，例如: 9600, 115200, 12000000"
+    )
+
+    # 添加输出目录参数（必需）
+    parser.add_argument(
+        "-o", "--output-dir",
+        required=True,
+        metavar="DIR",
+        help="输出目录路径，例如: D:\\logs"
+    )
+
+    # 添加后缀参数（可选）
+    parser.add_argument(
+        "-s", "--suffix",
+        default="",
+        metavar="SUFFIX",
+        help="文件后缀名（可选），例如: test, debug"
+    )
+
+    # 解析命令行参数
+    args = parser.parse_args()
+
     try:
-        with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
-            config = yaml.safe_load(f)  # 安全加载YAML文件
-            
-        # 检查必要的配置项
-        if 'com_port' not in config:  # 检查串口配置
-            print(f"错误：配置文件缺少 'com_port' 项", file=sys.stderr)
-            sys.exit(1)
-            
-        if 'baud_rate' not in config:  # 检查波特率配置
-            print(f"错误：配置文件缺少 'baud_rate' 项", file=sys.stderr)
-            sys.exit(1)
-            
-        if 'output_dir' not in config:  # 检查输出目录配置
-            print(f"错误：配置文件缺少 'output_dir' 项", file=sys.stderr)
-            sys.exit(1)
-            
-        # 提取COM端口
-        com_port = config['com_port']
-        if not com_port.startswith("COM"):  # 检查串口格式
-            print(f"错误：串口格式不正确，应为 COMx，得到的是 '{com_port}'", file=sys.stderr)
-            sys.exit(1)
-            
-        # 检查波特率是否为整数
-        try:
-            baud_rate = int(config['baud_rate'])  # 转换为整数
-        except ValueError:  # 转换失败
-            print(f"错误：波特率必须是数字，得到的是 '{config['baud_rate']}'", file=sys.stderr)
-            sys.exit(1)
-            
+        # --- 提取并验证串口名称 ---
+        com_port = args.com_port.strip()
+        if not com_port:
+            raise ValueError("串口名不能为空")
+        if not com_port.upper().startswith("COM"):
+            raise ValueError(f"串口格式不正确，应为 COMx，得到的是 '{com_port}'")
+
+        # --- 验证波特率 ---
+        baud_rate = args.baud_rate
+        if baud_rate <= 0:
+            raise ValueError("波特率必须为正整数")
+
+        # --- 验证输出目录 ---
+        output_dir = args.output_dir.strip()
+        if not output_dir:
+            raise ValueError("输出目录路径不能为空")
+
         # 标准化路径 - 确保使用系统正确的路径分隔符
-        output_dir = os.path.normpath(config['output_dir'])
-        
-        # 获取后缀名(可选配置)
-        suffix = config.get('suffix', '')  # 如果没有配置后缀，使用空字符串
-        
+        output_dir = os.path.normpath(output_dir)
+
         # 确保输出目录存在
         try:
-            if not os.path.exists(output_dir):  # 检查目录是否存在
-                os.makedirs(output_dir)  # 创建目录
-        except Exception as e:  # 创建目录失败
-            print(f"错误：创建输出目录失败: {e}", file=sys.stderr)
-            sys.exit(1)
-            
-        # 生成基于时间戳的文件名
+            if not os.path.exists(output_dir):
+                os.makedirs(output_dir)
+                print(f"已创建输出目录: {output_dir}")
+        except Exception as e:
+            raise ValueError(f"创建输出目录失败: {e}")
+
+        # --- 获取后缀名 ---
+        suffix = args.suffix.strip()
+
+        # --- 生成基于时间戳的输出文件名 ---
         timestamp = time.strftime("%Y-%m-%d_%H%M%S")  # 当前时间格式化
         # 如果有后缀名，则添加到文件名中
         if suffix:
-            output_file = os.path.join(output_dir, f"{timestamp}-{suffix}.bin")
+            output_file = os.path.join(output_dir, f"{timestamp}-{suffix}.log")
         else:
-            output_file = os.path.join(output_dir, f"{timestamp}.bin")
-            
-        # 返回串口名称(Windows格式)、波特率和输出文件路径
-        return f"\\\\.\\{com_port}", baud_rate, output_file
-        
-    except yaml.YAMLError as e:  # YAML解析错误
-        print(f"错误：配置文件格式不正确: {e}", file=sys.stderr)
-        sys.exit(1)
-    except Exception as e:  # 其他错误
-        print(f"错误：读取配置文件失败: {e}", file=sys.stderr)
-        sys.exit(1)
+            output_file = os.path.join(output_dir, f"{timestamp}.log")
 
-# --- 命令行参数解析函数 ---
-def parse_arguments():
-    """解析命令行参数"""
-    parser = argparse.ArgumentParser(description='Log to Binary Converter')
-    args = parser.parse_args()  # 解析参数
+        # --- Windows串口名称处理 ---
+        # 自动添加 \\.\\ 前缀以支持COM10及以上端口
+        serial_port = com_port.upper()
+        if sys.platform == "win32":
+            try:
+                # 提取COM后面的数字
+                com_num = int(serial_port[3:])
+                # 对于所有COM端口都添加前缀，确保稳定性
+                serial_port = f"\\\\.\\{serial_port}"
+                if com_num >= 10:
+                    print(f"提示：自动添加了 '\\\\.\\' 前缀以支持 COM{com_num} 端口")
+            except ValueError:
+                # 如果COM后面不是数字，仍然添加前缀
+                serial_port = f"\\\\.\\{serial_port}"
 
-    try:
-        # 读取配置文件
-        serial_port, baud_rate, output_file = read_config()
+        # 返回串口名称、波特率和输出文件路径
         return serial_port, baud_rate, output_file
-    except Exception as e:  # 解析失败
-        print(f"错误：解析参数失败: {e}", file=sys.stderr)
-        print(r"正确格式: xxx.exe", file=sys.stderr)
+
+    except ValueError as e:
+        print(f"错误：参数验证失败: {e}", file=sys.stderr)
+        parser.print_help()
+        sys.exit(1)
+    except Exception as e:
+        print(f"错误：解析命令行参数时发生未知错误: {e}", file=sys.stderr)
         sys.exit(1)
 
 # --- 主程序入口 ---
