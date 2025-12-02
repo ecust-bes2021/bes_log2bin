@@ -382,9 +382,11 @@ def parse_arguments():
     except ValueError as e:
         print(f"错误：参数验证失败: {e}", file=sys.stderr)
         parser.print_help()
+        input("Press Enter to exit...")
         sys.exit(1)
     except Exception as e:
         print(f"错误：解析命令行参数时发生未知错误: {e}", file=sys.stderr)
+        input("Press Enter to exit...")
         sys.exit(1)
 
 # --- 主程序入口 ---
@@ -399,6 +401,7 @@ if __name__ == "__main__":
     # 2. 检查并加载DLL
     if not os.path.exists(DLL_PATH):  # 检查DLL是否存在
         print(f"错误：找不到 DLL 文件: {DLL_PATH}")
+        input("Press Enter to exit...")
         sys.exit(1)
 
     try:
@@ -407,6 +410,7 @@ if __name__ == "__main__":
         print(f"成功加载 DLL: {DLL_PATH}")
     except OSError as e:  # 加载失败
         print(f"错误：加载 DLL 失败: {e}", file=sys.stderr)
+        input("Press Enter to exit...")
         sys.exit(1)
 
     # 3. 定义DLL导出函数的参数类型和返回类型
@@ -435,6 +439,7 @@ if __name__ == "__main__":
 
     except AttributeError as e:  # 函数定义失败
         print(f"错误：DLL 中缺少必要的导出函数: {e}", file=sys.stderr)
+        input("Press Enter to exit...")
         sys.exit(1)
 
     # 4. 创建回调函数实例并保持引用(防止被垃圾回收)
@@ -464,6 +469,7 @@ if __name__ == "__main__":
         # 尝试通知写入线程停止(虽然它可能还没写任何东西)
         data_queue.put(stop_writer_signal)
         writer_thread.join(timeout=2)  # 等待写入线程退出
+        input("Press Enter to exit...")
         sys.exit(1)
 
     print("串口打开成功。正在接收数据...\n")
