@@ -4,8 +4,11 @@
 启动工具：log2bin_script.exe
 关闭工具：taskkill log2bin_script.exe
 
+Note：
+- bes_log_to_bin_script.py: 无心跳检测的串口读取程序；
+- log2bin_script.py: 具备心跳检测的串口读取程序；
+- log2bin_copy.py: 用于测试命令行跑log数据的，主要用于TT工具子进程调用获取C1log数据；
 
 ###########重要说明#################
-当前工具改编自原有的log2bin工具，目前用于在TT工具中调用接收打印和显示log数据
-
-log2bin_copy：用于测试命令行跑log数据的；
+根据Note中的提示，按需选择使用哪个py文件即可
+生成可执行文件时，需要将build.py中的main_script修改为对应的py文件

@@ -357,9 +357,9 @@ def parse_arguments():
         timestamp = time.strftime("%Y-%m-%d_%H%M%S")  # 当前时间格式化
         # 如果有后缀名，则添加到文件名中
         if suffix:
-            output_file = os.path.join(output_dir, f"{timestamp}-{suffix}.log")
+            output_file = os.path.join(output_dir, f"C1log{timestamp}-{suffix}.log")
         else:
-            output_file = os.path.join(output_dir, f"{timestamp}.log")
+            output_file = os.path.join(output_dir, f"C1log{timestamp}.log")
 
         # --- Windows串口名称处理 ---
         # 自动添加 \\.\\ 前缀以支持COM10及以上端口
