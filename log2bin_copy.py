@@ -525,7 +525,8 @@ if __name__ == "__main__":
                 # 显示当前状态
                 status = writer_status.get_status()
                 bytes_written = status['bytes_written']
-                print(f"状态检查: 已写入 {bytes_written / (1024*1024):.2f} MB, 线程运行中: {status['running']}")
+                queue_size = data_queue.qsize()
+                print(f"状态检查: 已写入 {bytes_written / (1024*1024):.2f} MB, 线程运行中: {status['running']}, 队列待处理: {queue_size}")
                 last_status_check = current_time  # 更新最后检查时间
 
             # 休眠一段时间
