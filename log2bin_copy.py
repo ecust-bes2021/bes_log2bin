@@ -146,7 +146,7 @@ def writer_thread_func(filename):
         # 重试循环
         while retry_count < max_retry_count and file_handle is None:
             try:
-                file_handle = open(filename, 'w', encoding='utf-8')  # 以文本写模式打开文件
+                file_handle = open(filename, 'a', encoding='utf-8')  # 以文本追加模式打开文件
             except IOError as e:  # 文件打开失败
                 retry_count += 1  # 增加重试计数
                 error_msg = f"错误：打开输出文件失败 (尝试 {retry_count}/{max_retry_count}): {e}"
@@ -269,7 +269,7 @@ def parse_arguments():
     """
     # 创建命令行参数解析器
     parser = argparse.ArgumentParser(
-        description='Log to Text Converter - 具备心跳检测功能的串口数据读取程序',
+        description='Log to Text Converter - 串口log数据读取工具',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog='''
 示例用法：
