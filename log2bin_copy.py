@@ -480,7 +480,7 @@ if __name__ == "__main__":
         check_interval = 5.0  # 主循环检查间隔(秒)
         heartbeat_timeout = 10.0  # 心跳超时时间(秒)
         last_status_check = time.time()  # 上次状态检查时间
-        status_check_interval = 30.0  # 状态检查间隔(秒)
+        status_check_interval = 10.0  # 状态检查间隔(秒)
 
         while ser_lib.SerialPort_IsOpen():  # 串口保持打开状态时循环
             current_time = time.time()
